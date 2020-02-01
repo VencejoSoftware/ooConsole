@@ -29,7 +29,6 @@ install:
 
 script:
   - lazbuild $LAZ_OPT ./demo/lazarus/Demo.lpi
-  - $LAZ_ENV ./demo/build/release/demo
 
 notifications:
   email:
