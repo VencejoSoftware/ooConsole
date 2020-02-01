@@ -28,7 +28,7 @@ install:
   - ${delphiooLib}/ooBatch/code/.travis.install.py
 
 script:
-  - lazbuild $LAZ_OPT ./test/lazarus/test.lpi
+  - lazbuild $LAZ_OPT ./demo/lazarus/Demo.lpi
   - $LAZ_ENV ./test/build/release/test --all --format=plain
 
 notifications:
