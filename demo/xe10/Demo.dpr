@@ -8,9 +8,7 @@
 program Demo;
 
 {$APPTYPE CONSOLE}
-
 {$R *.res}
-
 
 uses
   SysUtils,
@@ -48,18 +46,17 @@ begin
         WriteText('Colored text' + sLineBreak);
       end;
 
-      WriteTaggedText('This is a text test of [warning], not [error], styled write text[error].',
-        '[', ']',
+      WriteTaggedText('This is a text test of [warning], not [error], styled write text[error].', '[', ']',
         procedure(const Text: String; var Tag: String; var TextColor, BackColor: TConsoleColor)
         begin
           if SameText(Tag, 'warning') then
             TextColor := Yellow
           else
             if SameText(Tag, 'error') then
-          begin
-            TextColor := White;
-            BackColor := Red;
-          end;
+            begin
+              TextColor := White;
+              BackColor := Red;
+            end;
         end);
     end;
     ReadLn;
