@@ -37,17 +37,14 @@ type
   @param(BackColor Background text color to customize)
 }
 {$ENDREGION}
-
 {$IFDEF FPC}
-  TOnApplyConsoleTextTagStyle = procedure(const Text: String; var Tag: String;
-    var TextColor, BackColor: TConsoleColor);
+  TOnApplyConsoleTextTagStyle = procedure(const Text: String; var Tag: String; var TextColor, BackColor: TConsoleColor);
   TOnApplyConsoleTextTagStyleOfObject = procedure(const Text: String; var Tag: String;
     var TextColor, BackColor: TConsoleColor) of object;
 {$ELSE}
   TOnApplyConsoleTextTagStyle = reference to procedure(const Text: String; var Tag: String;
     var TextColor, BackColor: TConsoleColor);
 {$ENDIF}
-
 {$REGION 'documentation'}
 {
   @abstract(Console object)
@@ -176,7 +173,6 @@ type
 
 {$IFNDEF FPC}
 
-
 function GetConsoleWindow: HWnd; stdcall; external 'kernel32.dll' name 'GetConsoleWindow';
 function AttachConsole(ProcessId: DWORD): BOOL; stdcall; external 'kernel32.dll' name 'AttachConsole';
 {$ENDIF}
@@ -210,7 +206,6 @@ begin
   until not TextTag.Founded;
 end;
 
-
 {$IFDEF FPC}
 
 function TConsole.CursorPosition: TPoint;
@@ -239,8 +234,7 @@ begin
   Write(stderr, Text);
 end;
 
-procedure TConsole.WriteTaggedText(const Text, StartTag, EndTag: String;
-  const OnStyle: TOnApplyConsoleTextTagStyle;
+procedure TConsole.WriteTaggedText(const Text, StartTag, EndTag: String; const OnStyle: TOnApplyConsoleTextTagStyle;
   const OnStyleOfObject: TOnApplyConsoleTextTagStyleOfObject);
 var
   TextTag: TTextTag;
@@ -251,8 +245,7 @@ begin
   LastUnStyledPos := 1;
   for TextTag in ExtractTags(Text, StartTag, EndTag) do
   begin
-    WriteStyledText(Copy(Text, LastUnStyledPos, TextTag.StartPos + Length(StartTag) - LastUnStyledPos), Null,
-      Null);
+    WriteStyledText(Copy(Text, LastUnStyledPos, TextTag.StartPos + Length(StartTag) - LastUnStyledPos), Null, Null);
     LastUnStyledPos := TextTag.EndPos;
     Tag := TextTag.Content;
     TextColor := Null;
@@ -266,8 +259,7 @@ begin
   WriteStyledText(Copy(Text, LastUnStyledPos), Null, Null);
 end;
 
-procedure TConsole.WriteStyledText(const Text: String; const TextColor,
-  BackColor: TConsoleColor);
+procedure TConsole.WriteStyledText(const Text: String; const TextColor, BackColor: TConsoleColor);
 begin
   NormVideo;
   if BackColor <> Null then
@@ -298,7 +290,6 @@ begin
 end;
 
 {$ELSE}
-
 
 function TConsole.CursorPosition: TPoint;
 var
@@ -400,7 +391,7 @@ procedure TConsole.OpenIfNeed;
   end;
 
 const
-  ATTACH_PARENT_PROCESS = DWORD(-1);
+  ATTACH_PARENT_PROCESS = DWORD( - 1);
 begin
   if not IsOwnConsoleWindow then
     if not AttachConsole(ATTACH_PARENT_PROCESS) then
@@ -415,7 +406,6 @@ begin
 end;
 
 {$ENDIF}
-
 
 class function TConsole.New: IConsole;
 begin

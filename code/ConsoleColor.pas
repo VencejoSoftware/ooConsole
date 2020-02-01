@@ -13,8 +13,8 @@
 unit ConsoleColor;
 
 {$IFDEF FPC}
-  {$ModeSwitch advancedrecords}
-  {$ModeSwitch typehelpers}
+{$ModeSwitch advancedrecords}
+{$ModeSwitch typehelpers}
 {$ENDIF}
 
 interface
@@ -44,10 +44,8 @@ type
   @value White White color
 }
 {$ENDREGION}
-  TConsoleColor = (Null = -1, Black = 0, Blue = 1, Green = 2, Cyan = 3, Red =
-    4, Magenta = 5, Brown = 6, LightGray = 7,
-    DarkGray = 8, LightBlue = 9, LightGreen = 10, LightCyan = 11,
-    LightRed = 12, LightMagenta = 13, Yellow = 14,
+  TConsoleColor = (Null = - 1, Black = 0, Blue = 1, Green = 2, Cyan = 3, Red = 4, Magenta = 5, Brown = 6, LightGray = 7,
+    DarkGray = 8, LightBlue = 9, LightGreen = 10, LightCyan = 11, LightRed = 12, LightMagenta = 13, Yellow = 14,
     White = 15);
 
 {$REGION 'documentation'}
@@ -64,10 +62,8 @@ type
   TConsoleColorHelper = record helper for TConsoleColor
   strict private
   const
-    COLOR_TEXT: array [TConsoleColor] of string =
-      ('Black', 'Blue', 'Green', 'Cyan', 'Red', 'Magenta', 'Brown',
-      'LightGray', 'DarkGray', 'LightBlue', 'LightGreen', 'LightCyan',
-      'LightRed', 'LightMagenta', 'Yellow',
+    COLOR_TEXT: array [TConsoleColor] of string = ('Black', 'Blue', 'Green', 'Cyan', 'Red', 'Magenta', 'Brown',
+      'LightGray', 'DarkGray', 'LightBlue', 'LightGreen', 'LightCyan', 'LightRed', 'LightMagenta', 'Yellow',
       'White', 'Null');
   public
     function ToString: string;
