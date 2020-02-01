@@ -73,6 +73,9 @@ type
 
 var
   Application: TDemo;
+
+{$R *.res}
+
 begin
   Application := TDemo.Create(nil);
   Application.Run;
