@@ -15,7 +15,6 @@
 *.a
 *.o
 *.ocx
-*.lps
 *.bak
 *.compiled
 *.o
