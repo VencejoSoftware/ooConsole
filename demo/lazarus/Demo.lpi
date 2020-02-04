@@ -125,6 +125,7 @@
       <Unit0>
         <Filename Value="demo.lpr"/>
         <IsPartOfProject Value="True"/>
+        <UnitName Value="Demo"/>
       </Unit0>
       <Unit1>
         <Filename Value="..\..\code\Console.pas"/>

@@ -12,6 +12,8 @@
 {$ENDREGION}
 unit Console;
 
+{$IFDEF FPC}{$apptype console}{$ENDIF}
+
 interface
 
 uses
@@ -21,6 +23,7 @@ uses
   Windows,
 {$ENDIF}
 {$ELSE}
+  SyncObjs,
   Windows,
 {$ENDIF}
   SysUtils, Types, StrUtils,
@@ -152,6 +155,9 @@ type
 {$IFNDEF FPC}
     _OutHandle: THandle;
     _DefaultBufferInfo: TConsoleScreenBufferInfo;
+    _CriticalSection: TCriticalSection;
+{$ELSE}
+    _CriticalSection: TRTLCriticalSection;
 {$ENDIF}
   private
     function FindTag(const Text, StartTag, EndTag: String; const Offset: NativeInt): TTextTag;
@@ -168,6 +174,7 @@ type
     procedure WriteStyledText(const Text: String; const TextColor, BackColor: TConsoleColor);
     procedure Clear;
     constructor Create;
+    destructor Destroy; override;
     class function New: IConsole;
   end;
 
@@ -216,22 +223,42 @@ end;
 
 procedure TConsole.ChangeCursorPos(const X, Y: smallint);
 begin
-  GotoXY(Succ(X), Succ(Y));
+  EnterCriticalSection(_CriticalSection);
+  try
+    GotoXY(Succ(X), Succ(Y));
+  finally
+    LeaveCriticalSection(_CriticalSection);
+  end;
 end;
 
 procedure TConsole.ChangeTextColor(const Color: TConsoleColor);
 begin
-  TextColor(byte(Color));
+  EnterCriticalSection(_CriticalSection);
+  try
+    TextColor(byte(Color));
+  finally
+    LeaveCriticalSection(_CriticalSection);
+  end;
 end;
 
 procedure TConsole.ChangeBackColor(const Color: TConsoleColor);
 begin
-  TextBackground(byte(Color));
+  EnterCriticalSection(_CriticalSection);
+  try
+    TextBackground(byte(Color));
+  finally
+    LeaveCriticalSection(_CriticalSection);
+  end;
 end;
 
 procedure TConsole.WriteText(const Text: string);
 begin
-  Write(stderr, Text);
+  EnterCriticalSection(_CriticalSection);
+  try
+    Write(stderr, Text);
+  finally
+    LeaveCriticalSection(_CriticalSection);
+  end;
 end;
 
 procedure TConsole.WriteTaggedText(const Text, StartTag, EndTag: String; const OnStyle: TOnApplyConsoleTextTagStyle;
@@ -271,22 +298,36 @@ end;
 
 procedure TConsole.Clear;
 begin
-  Clrscr;
+  EnterCriticalSection(_CriticalSection);
+  try
+    Clrscr;
+  finally
+    LeaveCriticalSection(_CriticalSection);
+  end;
 end;
 
 procedure TConsole.OpenIfNeed;
 begin
 {$IFDEF WINDOWS}
-  AllocConsole;
+  if not AttachConsole(ATTACH_PARENT_PROCESS) then
+    AllocConsole;
 {$ENDIF}
+  IsConsole := True;
   SysInitStdIO;
 end;
 
 constructor TConsole.Create;
 begin
+  InitializeCriticalSection(_CriticalSection);
   OpenIfNeed;
   AssignCrt(stderr);
   Rewrite(stderr);
+end;
+
+destructor TConsole.Destroy;
+begin
+  DeleteCriticalSection(_CriticalSection);
+  inherited Destroy;
 end;
 
 {$ELSE}
@@ -304,9 +345,14 @@ procedure TConsole.ChangeCursorPos(const X, Y: smallint);
 var
   NewPos: TCoord;
 begin
-  NewPos.X := X;
-  NewPos.Y := Y;
-  SetConsoleCursorPosition(_OutHandle, NewPos);
+  _CriticalSection.Acquire;
+  try
+    NewPos.X := X;
+    NewPos.Y := Y;
+    SetConsoleCursorPosition(_OutHandle, NewPos);
+  finally
+    _CriticalSection.Release;
+  end;
 end;
 
 procedure TConsole.WriteStyledText(const Text: String; const TextColor, BackColor: TConsoleColor);
@@ -342,7 +388,12 @@ end;
 
 procedure TConsole.WriteText(const Text: string);
 begin
-  Write(Text);
+  _CriticalSection.Acquire;
+  try
+    Write(Text);
+  finally
+    _CriticalSection.Release;
+  end;
 end;
 
 procedure TConsole.ChangeBackColor(const Color: TConsoleColor);
@@ -350,9 +401,14 @@ var
   BufInfo: TConsoleScreenBufferInfo;
   Attributes: byte;
 begin
-  GetConsoleSCreenBufferInfo(_OutHandle, BufInfo);
-  Attributes := (BufInfo.wAttributes and $0F) or ((Ord(Color) shl 4) and $F0);
-  SetConsoleTextAttribute(_OutHandle, Attributes);
+  _CriticalSection.Acquire;
+  try
+    GetConsoleSCreenBufferInfo(_OutHandle, BufInfo);
+    Attributes := (BufInfo.wAttributes and $0F) or ((Ord(Color) shl 4) and $F0);
+    SetConsoleTextAttribute(_OutHandle, Attributes);
+  finally
+    _CriticalSection.Release;
+  end;
 end;
 
 procedure TConsole.ChangeTextColor(const Color: TConsoleColor);
@@ -360,9 +416,14 @@ var
   BufInfo: TConsoleScreenBufferInfo;
   Attributes: byte;
 begin
-  GetConsoleSCreenBufferInfo(_OutHandle, BufInfo);
-  Attributes := (BufInfo.wAttributes and $F0) or (byte(Color) and $0F);
-  SetConsoleTextAttribute(_OutHandle, Attributes);
+  _CriticalSection.Acquire;
+  try
+    GetConsoleSCreenBufferInfo(_OutHandle, BufInfo);
+    Attributes := (BufInfo.wAttributes and $F0) or (byte(Color) and $0F);
+    SetConsoleTextAttribute(_OutHandle, Attributes);
+  finally
+    _CriticalSection.Release;
+  end;
 end;
 
 procedure TConsole.Clear;
@@ -372,13 +433,18 @@ var
   charsWritten: longword;
   ConSize: longword;
 begin
-  coordScreen.X := 0;
-  coordScreen.Y := 0;
-  GetConsoleSCreenBufferInfo(_OutHandle, SBI);
-  ConSize := SBI.dwSize.X * SBI.dwSize.Y;
-  FillConsoleOutputCharacter(_OutHandle, ' ', ConSize, coordScreen, charsWritten);
-  FillConsoleOutputAttribute(_OutHandle, SBI.wAttributes, ConSize, coordScreen, charsWritten);
-  SetConsoleCursorPosition(_OutHandle, coordScreen);
+  _CriticalSection.Acquire;
+  try
+    coordScreen.X := 0;
+    coordScreen.Y := 0;
+    GetConsoleSCreenBufferInfo(_OutHandle, SBI);
+    ConSize := SBI.dwSize.X * SBI.dwSize.Y;
+    FillConsoleOutputCharacter(_OutHandle, ' ', ConSize, coordScreen, charsWritten);
+    FillConsoleOutputAttribute(_OutHandle, SBI.wAttributes, ConSize, coordScreen, charsWritten);
+    SetConsoleCursorPosition(_OutHandle, coordScreen);
+  finally
+    _CriticalSection.Release;
+  end;
 end;
 
 procedure TConsole.OpenIfNeed;
@@ -400,9 +466,16 @@ end;
 
 constructor TConsole.Create;
 begin
+  _CriticalSection := TCriticalSection.Create;
   OpenIfNeed;
   _OutHandle := GetStdHandle(STD_OUTPUT_HANDLE);
   GetConsoleSCreenBufferInfo(_OutHandle, _DefaultBufferInfo);
+end;
+
+destructor TConsole.Destroy;
+begin
+  _CriticalSection.Free;
+  inherited;
 end;
 
 {$ENDIF}
