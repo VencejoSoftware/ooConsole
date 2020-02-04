@@ -23,9 +23,9 @@ uses
   Windows,
 {$ENDIF}
 {$ELSE}
-  SyncObjs,
   Windows,
 {$ENDIF}
+  SyncObjs,
   SysUtils, Types, StrUtils,
   ConsoleColor;
 
@@ -155,10 +155,8 @@ type
 {$IFNDEF FPC}
     _OutHandle: THandle;
     _DefaultBufferInfo: TConsoleScreenBufferInfo;
-    _CriticalSection: TCriticalSection;
-{$ELSE}
-    _CriticalSection: TRTLCriticalSection;
 {$ENDIF}
+    _CriticalSection: SyncObjs.TCriticalSection;
   private
     function FindTag(const Text, StartTag, EndTag: String; const Offset: NativeInt): TTextTag;
     function ExtractTags(const Text, StartTag, EndTag: String): TTextTagArray;
@@ -223,41 +221,41 @@ end;
 
 procedure TConsole.ChangeCursorPos(const X, Y: smallint);
 begin
-  EnterCriticalSection(_CriticalSection);
+  _CriticalSection.Enter;
   try
     GotoXY(Succ(X), Succ(Y));
   finally
-    LeaveCriticalSection(_CriticalSection);
+    _CriticalSection.Leave;
   end;
 end;
 
 procedure TConsole.ChangeTextColor(const Color: TConsoleColor);
 begin
-  EnterCriticalSection(_CriticalSection);
+  _CriticalSection.Enter;
   try
     TextColor(byte(Color));
   finally
-    LeaveCriticalSection(_CriticalSection);
+    _CriticalSection.Leave;
   end;
 end;
 
 procedure TConsole.ChangeBackColor(const Color: TConsoleColor);
 begin
-  EnterCriticalSection(_CriticalSection);
+  _CriticalSection.Enter;
   try
     TextBackground(byte(Color));
   finally
-    LeaveCriticalSection(_CriticalSection);
+    _CriticalSection.Leave;
   end;
 end;
 
 procedure TConsole.WriteText(const Text: string);
 begin
-  EnterCriticalSection(_CriticalSection);
+  _CriticalSection.Enter;
   try
     Write(stderr, Text);
   finally
-    LeaveCriticalSection(_CriticalSection);
+    _CriticalSection.Leave;
   end;
 end;
 
@@ -298,11 +296,11 @@ end;
 
 procedure TConsole.Clear;
 begin
-  EnterCriticalSection(_CriticalSection);
+  _CriticalSection.Enter;
   try
     Clrscr;
   finally
-    LeaveCriticalSection(_CriticalSection);
+    _CriticalSection.Leave;
   end;
 end;
 
@@ -318,7 +316,7 @@ end;
 
 constructor TConsole.Create;
 begin
-  InitializeCriticalSection(_CriticalSection);
+  _CriticalSection := SyncObjs.TCriticalSection.Create;
   OpenIfNeed;
   AssignCrt(stderr);
   Rewrite(stderr);
@@ -326,7 +324,7 @@ end;
 
 destructor TConsole.Destroy;
 begin
-  DeleteCriticalSection(_CriticalSection);
+  _CriticalSection.Free;
   inherited Destroy;
 end;
 
