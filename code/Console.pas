@@ -12,42 +12,13 @@
 {$ENDREGION}
 unit Console;
 
-{$IFDEF FPC}{$apptype console}{$ENDIF}
-
 interface
 
 uses
-{$IFDEF FPC}
-  Crt,
-{$IFDEF WINDOWS}
-  Windows,
-{$ENDIF}
-{$ELSE}
-  Windows,
-{$ENDIF}
-  SyncObjs,
-  SysUtils, Types, StrUtils,
+  Types,
   ConsoleColor;
 
 type
-
-{$REGION 'documentation'}
-{
-  @abstract(Callback executed when a tag is founded for custom styles)
-  @param(Text String to send to console)
-  @param(Tag Tag value founded)
-  @param(TextColor Foreground text color to customize)
-  @param(BackColor Background text color to customize)
-}
-{$ENDREGION}
-{$IFDEF FPC}
-  TOnApplyConsoleTextTagStyle = procedure(const Text: String; var Tag: String; var TextColor, BackColor: TConsoleColor);
-  TOnApplyConsoleTextTagStyleOfObject = procedure(const Text: String; var Tag: String;
-    var TextColor, BackColor: TConsoleColor) of object;
-{$ELSE}
-  TOnApplyConsoleTextTagStyle = reference to procedure(const Text: String; var Tag: String;
-    var TextColor, BackColor: TConsoleColor);
-{$ENDIF}
 {$REGION 'documentation'}
 {
   @abstract(Console object)
@@ -74,14 +45,6 @@ type
     @param(Text String for console out)
   )
   @member(
-    WriteTaggedText Write text in console, parsing tags for colorising tag-text
-    @param(Text String for console out)
-    @param(StartTag String with starting tag delimiter)
-    @param(EndTag String with finishing tag delimiter)
-    @param(OnStyle Callback to execute when tag is founded to set custom style)
-    @param(OnStyleOfObject Tricky for free pascal debt with anonymous functions)
-  )
-  @member(
     WriteStyledText Write text with custom style
     @param(Text String for console out)
     @param(TextColor Text foreground color)
@@ -90,9 +53,11 @@ type
   @member(
     Clear Cleans the console/terminal screen and restore default style
   )
+  @member(
+    ResetStyle Restore default console/terminal style
+  )
 }
 {$ENDREGION}
-
   IConsole = interface
     ['{96C214BB-45BD-4DA8-BF47-7D30EAE8E2B9}']
     function CursorPosition: TPoint;
@@ -100,383 +65,84 @@ type
     procedure ChangeTextColor(const Color: TConsoleColor);
     procedure ChangeBackColor(const Color: TConsoleColor);
     procedure WriteText(const Text: string);
-    procedure WriteTaggedText(const Text, StartTag, EndTag: String; const OnStyle: TOnApplyConsoleTextTagStyle
-{$IFDEF FPC}; const OnStyleOfObject: TOnApplyConsoleTextTagStyleOfObject{$ENDIF} );
     procedure WriteStyledText(const Text: String; const TextColor, BackColor: TConsoleColor);
     procedure Clear;
+    procedure ResetStyle;
   end;
-
-{$REGION 'documentation'}
-{
-  @abstract(Implementation of @link(IConsole))
-  @member(CursorPosition @seealso(IConsole.CursorPosition))
-  @member(ChangeCursorPos @seealso(IConsole.ChangeCursorPos))
-  @member(ChangeTextColor @seealso(IConsole.ChangeTextColor))
-  @member(ChangeBackColor @seealso(IConsole.ChangeBackColor))
-  @member(WriteText @seealso(IConsole.WriteText))
-  @member(WriteTaggedText @seealso(IConsole.WriteTaggedText))
-  @member(WriteStyledText @seealso(IConsole.WriteStyledText))
-  @member(Clear @seealso(IConsole.Clear))
-  @member(
-    FindTag Find tag based in a start position and tag delimiters
-    @param(Text String to use when parsing)
-    @param(StartTag String with starting tag delimiter)
-    @param(EndTag String with finishing tag delimiter)
-    @param(Offset Parse start position)
-  )
-  @member(
-    ExtractTags Builds a list of tags
-    @param(Text String to use when parsing)
-    @param(StartTag String with starting tag delimiter)
-    @param(EndTag String with finishing tag delimiter)
-    @return(Array of founded tags)
-  )
-  @member(
-    Create Object constructor
-  )
-  @member(
-    New Create a new @classname as interface
-  )
-}
-{$ENDREGION}
-{ TConsole }
 
   TConsole = class sealed(TInterfacedObject, IConsole)
   strict private
-  type
-    TTextTag = record
-      StartPos, EndPos: NativeInt;
-      Founded: Boolean;
-      Content: String;
-    end;
-
-    TTextTagArray = array of TTextTag;
-  strict private
-{$IFNDEF FPC}
-    _OutHandle: THandle;
-    _DefaultBufferInfo: TConsoleScreenBufferInfo;
-{$ENDIF}
-    _CriticalSection: SyncObjs.TCriticalSection;
-  private
-    function FindTag(const Text, StartTag, EndTag: String; const Offset: NativeInt): TTextTag;
-    function ExtractTags(const Text, StartTag, EndTag: String): TTextTagArray;
-    procedure OpenIfNeed;
+    _Console: IConsole;
   public
     function CursorPosition: TPoint;
     procedure ChangeCursorPos(const X, Y: smallint);
     procedure ChangeTextColor(const Color: TConsoleColor);
     procedure ChangeBackColor(const Color: TConsoleColor);
     procedure WriteText(const Text: string);
-    procedure WriteTaggedText(const Text, StartTag, EndTag: String; const OnStyle: TOnApplyConsoleTextTagStyle
-{$IFDEF FPC}; const OnStyleOfObject: TOnApplyConsoleTextTagStyleOfObject{$ENDIF});
     procedure WriteStyledText(const Text: String; const TextColor, BackColor: TConsoleColor);
     procedure Clear;
+    procedure ResetStyle;
     constructor Create;
-    destructor Destroy; override;
     class function New: IConsole;
   end;
 
-{$IFNDEF FPC}
-
-function GetConsoleWindow: HWnd; stdcall; external 'kernel32.dll' name 'GetConsoleWindow';
-function AttachConsole(ProcessId: DWORD): BOOL; stdcall; external 'kernel32.dll' name 'AttachConsole';
-{$ENDIF}
-
 implementation
 
-function TConsole.FindTag(const Text, StartTag, EndTag: String; const Offset: NativeInt): TTextTag;
-begin
-  Result.StartPos := PosEx(StartTag, Text, Offset);
-  Result.EndPos := PosEx(EndTag, Text, Succ(Result.StartPos));
-  Result.Founded := (Result.StartPos > 0) and (Result.EndPos > 0);
-  if Result.Founded then
-    Result.Content := Copy(Text, Result.StartPos + Length(StartTag), Result.EndPos - Result.StartPos - Length(EndTag));
-end;
-
-function TConsole.ExtractTags(const Text, StartTag, EndTag: String): TTextTagArray;
-var
-  TextTag: TTextTag;
-  Offset: NativeInt;
-begin
-  Offset := 1;
-  SetLength(Result, 0);
-  repeat
-    TextTag := FindTag(Text, StartTag, EndTag, Offset);
-    if TextTag.Founded then
-    begin
-      SetLength(Result, Succ(Length(Result)));
-      Result[High(Result)] := TextTag;
-      Offset := Succ(TextTag.EndPos);
-    end;
-  until not TextTag.Founded;
-end;
-
+uses
 {$IFDEF FPC}
-
-function TConsole.CursorPosition: TPoint;
-begin
-  Result.X := WhereX;
-  Result.X := WhereY;
-end;
-
-procedure TConsole.ChangeCursorPos(const X, Y: smallint);
-begin
-  _CriticalSection.Enter;
-  try
-    GotoXY(Succ(X), Succ(Y));
-  finally
-    _CriticalSection.Leave;
-  end;
-end;
-
-procedure TConsole.ChangeTextColor(const Color: TConsoleColor);
-begin
-  _CriticalSection.Enter;
-  try
-    TextColor(byte(Color));
-  finally
-    _CriticalSection.Leave;
-  end;
-end;
-
-procedure TConsole.ChangeBackColor(const Color: TConsoleColor);
-begin
-  _CriticalSection.Enter;
-  try
-    TextBackground(byte(Color));
-  finally
-    _CriticalSection.Leave;
-  end;
-end;
-
-procedure TConsole.WriteText(const Text: string);
-begin
-  _CriticalSection.Enter;
-  try
-    Write(stderr, Text);
-  finally
-    _CriticalSection.Leave;
-  end;
-end;
-
-procedure TConsole.WriteTaggedText(const Text, StartTag, EndTag: String; const OnStyle: TOnApplyConsoleTextTagStyle;
-  const OnStyleOfObject: TOnApplyConsoleTextTagStyleOfObject);
-var
-  TextTag: TTextTag;
-  TextColor, BackColor: TConsoleColor;
-  LastUnStyledPos: NativeInt;
-  Tag: String;
-begin
-  LastUnStyledPos := 1;
-  for TextTag in ExtractTags(Text, StartTag, EndTag) do
-  begin
-    WriteStyledText(Copy(Text, LastUnStyledPos, TextTag.StartPos + Length(StartTag) - LastUnStyledPos), Null, Null);
-    LastUnStyledPos := TextTag.EndPos;
-    Tag := TextTag.Content;
-    TextColor := Null;
-    BackColor := Null;
-    if Assigned(OnStyle) then
-      OnStyle(Text, Tag, TextColor, BackColor)
-    else
-      OnStyleOfObject(Text, Tag, TextColor, BackColor);
-    WriteStyledText(Tag, TextColor, BackColor);
-  end;
-  WriteStyledText(Copy(Text, LastUnStyledPos), Null, Null);
-end;
-
-procedure TConsole.WriteStyledText(const Text: String; const TextColor, BackColor: TConsoleColor);
-begin
-  NormVideo;
-  if BackColor <> Null then
-    ChangeBackColor(BackColor);
-  if TextColor <> Null then
-    ChangeTextColor(TextColor);
-  WriteText(Text);
-end;
-
-procedure TConsole.Clear;
-begin
-  _CriticalSection.Enter;
-  try
-    Clrscr;
-  finally
-    _CriticalSection.Leave;
-  end;
-end;
-
-procedure TConsole.OpenIfNeed;
-begin
-{$IFDEF WINDOWS}
-  if not AttachConsole(ATTACH_PARENT_PROCESS) then
-    AllocConsole;
-{$ENDIF}
-  IsConsole := True;
-  SysInitStdIO;
-end;
-
-constructor TConsole.Create;
-begin
-  _CriticalSection := SyncObjs.TCriticalSection.Create;
-  OpenIfNeed;
-  AssignCrt(stderr);
-  Rewrite(stderr);
-end;
-
-destructor TConsole.Destroy;
-begin
-  _CriticalSection.Free;
-  inherited Destroy;
-end;
-
+  FpcConsole
 {$ELSE}
+  DelphiConsole
+{$ENDIF};
 
 function TConsole.CursorPosition: TPoint;
-var
-  BufferInfo: TConsoleScreenBufferInfo;
 begin
-  GetConsoleSCreenBufferInfo(_OutHandle, BufferInfo);
-  Result.X := BufferInfo.dwCursorPosition.X;
-  Result.Y := BufferInfo.dwCursorPosition.Y;
+  Result := _Console.CursorPosition;
 end;
 
 procedure TConsole.ChangeCursorPos(const X, Y: smallint);
-var
-  NewPos: TCoord;
 begin
-  _CriticalSection.Acquire;
-  try
-    NewPos.X := X;
-    NewPos.Y := Y;
-    SetConsoleCursorPosition(_OutHandle, NewPos);
-  finally
-    _CriticalSection.Release;
-  end;
+  _Console.ChangeCursorPos(X, Y);
 end;
 
-procedure TConsole.WriteStyledText(const Text: String; const TextColor, BackColor: TConsoleColor);
+procedure TConsole.ChangeTextColor(const Color: TConsoleColor);
 begin
-  SetConsoleTextAttribute(_OutHandle, _DefaultBufferInfo.wAttributes);
-  if BackColor <> Null then
-    ChangeBackColor(BackColor);
-  if TextColor <> Null then
-    ChangeTextColor(TextColor);
-  WriteText(Text);
+  _Console.ChangeTextColor(Color);
 end;
 
-procedure TConsole.WriteTaggedText(const Text, StartTag, EndTag: String; const OnStyle: TOnApplyConsoleTextTagStyle);
-var
-  TextTag: TTextTag;
-  TextColor, BackColor: TConsoleColor;
-  LastUnStyledPos: NativeInt;
-  Tag: String;
+procedure TConsole.ChangeBackColor(const Color: TConsoleColor);
 begin
-  LastUnStyledPos := 1;
-  for TextTag in ExtractTags(Text, StartTag, EndTag) do
-  begin
-    WriteStyledText(Copy(Text, LastUnStyledPos, TextTag.StartPos + Length(StartTag) - LastUnStyledPos), Null, Null);
-    LastUnStyledPos := TextTag.EndPos;
-    Tag := TextTag.Content;
-    TextColor := Null;
-    BackColor := Null;
-    OnStyle(Text, Tag, TextColor, BackColor);
-    WriteStyledText(Tag, TextColor, BackColor);
-  end;
-  WriteStyledText(Copy(Text, LastUnStyledPos), Null, Null);
+  _Console.ChangeBackColor(Color);
 end;
 
 procedure TConsole.WriteText(const Text: string);
 begin
-  _CriticalSection.Acquire;
-  try
-    Write(Text);
-  finally
-    _CriticalSection.Release;
-  end;
+  _Console.WriteText(Text);
 end;
 
-procedure TConsole.ChangeBackColor(const Color: TConsoleColor);
-var
-  BufInfo: TConsoleScreenBufferInfo;
-  Attributes: byte;
+procedure TConsole.WriteStyledText(const Text: String; const TextColor, BackColor: TConsoleColor);
 begin
-  _CriticalSection.Acquire;
-  try
-    GetConsoleSCreenBufferInfo(_OutHandle, BufInfo);
-    Attributes := (BufInfo.wAttributes and $0F) or ((Ord(Color) shl 4) and $F0);
-    SetConsoleTextAttribute(_OutHandle, Attributes);
-  finally
-    _CriticalSection.Release;
-  end;
-end;
-
-procedure TConsole.ChangeTextColor(const Color: TConsoleColor);
-var
-  BufInfo: TConsoleScreenBufferInfo;
-  Attributes: byte;
-begin
-  _CriticalSection.Acquire;
-  try
-    GetConsoleSCreenBufferInfo(_OutHandle, BufInfo);
-    Attributes := (BufInfo.wAttributes and $F0) or (byte(Color) and $0F);
-    SetConsoleTextAttribute(_OutHandle, Attributes);
-  finally
-    _CriticalSection.Release;
-  end;
+  _Console.WriteStyledText(Text, TextColor, BackColor);
 end;
 
 procedure TConsole.Clear;
-var
-  coordScreen: TCoord;
-  SBI: TConsoleScreenBufferInfo;
-  charsWritten: longword;
-  ConSize: longword;
 begin
-  _CriticalSection.Acquire;
-  try
-    coordScreen.X := 0;
-    coordScreen.Y := 0;
-    GetConsoleSCreenBufferInfo(_OutHandle, SBI);
-    ConSize := SBI.dwSize.X * SBI.dwSize.Y;
-    FillConsoleOutputCharacter(_OutHandle, ' ', ConSize, coordScreen, charsWritten);
-    FillConsoleOutputAttribute(_OutHandle, SBI.wAttributes, ConSize, coordScreen, charsWritten);
-    SetConsoleCursorPosition(_OutHandle, coordScreen);
-  finally
-    _CriticalSection.Release;
-  end;
+  _Console.Clear;
 end;
 
-procedure TConsole.OpenIfNeed;
-  function IsOwnConsoleWindow: Boolean;
-  var
-    ConsoleHandle: DWORD;
-  begin
-    GetWindowThreadProcessId(GetConsoleWindow, ConsoleHandle);
-    Result := (ConsoleHandle = GetCurrentProcessId);
-  end;
-
-const
-  ATTACH_PARENT_PROCESS = DWORD( - 1);
+procedure TConsole.ResetStyle;
 begin
-  if not IsOwnConsoleWindow then
-    if not AttachConsole(ATTACH_PARENT_PROCESS) then
-      AllocConsole;
+  _Console.ResetStyle;
 end;
 
 constructor TConsole.Create;
 begin
-  _CriticalSection := TCriticalSection.Create;
-  OpenIfNeed;
-  _OutHandle := GetStdHandle(STD_OUTPUT_HANDLE);
-  GetConsoleSCreenBufferInfo(_OutHandle, _DefaultBufferInfo);
-end;
-
-destructor TConsole.Destroy;
-begin
-  _CriticalSection.Free;
-  inherited;
-end;
-
+{$IFDEF FPC}
+  _Console := TFPCConsole.New;
+{$ELSE}
+  _Console := TDelphiConsole.New;
 {$ENDIF}
+end;
 
 class function TConsole.New: IConsole;
 begin
